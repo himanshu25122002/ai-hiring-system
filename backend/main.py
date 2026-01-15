@@ -228,7 +228,7 @@ def submit_answer(candidate_id: str, answer: str):
                 {
                     "name": candidate["name"],
                     "email": candidate["email"],
-                    "calendar_link": job["calendly_link"]
+                    "calendly_link": job["calendly_link"]
                 }
             )
 
@@ -266,6 +266,7 @@ def get_candidates_for_job(job_id: str):
 @app.get("/")
 def health_check():
     return {"status": "Backend is running"}
+
 
 
 
