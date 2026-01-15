@@ -44,6 +44,7 @@ class JobCreateRequest(BaseModel):
     job_description: str
     skills: str
     experience: str
+    calendly_link: str
     culture_traits: str | None = None
 
 
@@ -63,6 +64,7 @@ def create_job(job: JobCreateRequest):
         "job_description": job.job_description,
         "skills": job.skills,
         "experience": job.experience,
+        "calendly_link": job.calendly_link,
         "culture_traits": job.culture_traits
     }
 
@@ -219,12 +221,14 @@ def submit_answer(candidate_id: str, answer: str):
         # MAKE – EMAIL #3 (Final Interview Scheduling)
         # -----------------------------
         if final_reco in ["Strong Fit", "Moderate Fit"]:
+
+            job = jobs_db[candidate["job_id"]]
             trigger_make_webhook(
                 os.getenv("MAKE_FINAL_WEBHOOK"),
                 {
                     "name": candidate["name"],
                     "email": candidate["email"],
-                    "calendar_link": "Will be shared by HR shortly"
+                    "calendar_link": job["calendly_link"]
                 }
             )
 
@@ -262,5 +266,6 @@ def get_candidates_for_job(job_id: str):
 @app.get("/")
 def health_check():
     return {"status": "Backend is running"}
+
 
 
