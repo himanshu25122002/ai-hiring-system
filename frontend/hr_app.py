@@ -18,6 +18,7 @@ job_title = st.text_input("Job Title")
 job_description = st.text_area("Job Description")
 skills = st.text_input("Required Skills")
 experience = st.text_input("Experience")
+calendly_link = st.text_input("Calendly Link for Final Interview")
 culture_traits = st.text_input("Culture Traits (optional)")
 
 if st.button("Create Job"):
@@ -29,6 +30,7 @@ if st.button("Create Job"):
             "job_description": job_description,
             "skills": skills,
             "experience": experience,
+            "calendly_link": calendly_link,
             "culture_traits": culture_traits
         }
 
@@ -53,3 +55,4 @@ if st.button("Create Job"):
             st.error("⏳ Backend timeout. Please retry.")
         except Exception as e:
             st.error(f"Unexpected error: {e}")
+
