@@ -156,7 +156,14 @@ def send_interview_link(candidate_id: str):
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
-    interview_link = f"http://localhost:8501/?candidate_id={candidate_id}"
+    FRONTEND_INTERVIEW_URL = os.getenv("FRONTEND_INTERVIEW_URL")
+
+    if not FRONTEND_INTERVIEW_URL:
+        FRONTEND_INTERVIEW_URL = "http://localhost:8501"  # fallback for local dev
+
+    interview_link = f"{FRONTEND_INTERVIEW_URL}/?candidate_id={candidate_id}"
+
+
 
     trigger_make_webhook(
         os.getenv("MAKE_INTERVIEW_WEBHOOK"),
@@ -255,4 +262,5 @@ def get_candidates_for_job(job_id: str):
 @app.get("/")
 def health_check():
     return {"status": "Backend is running"}
+
 
