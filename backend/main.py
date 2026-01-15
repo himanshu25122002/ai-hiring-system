@@ -66,7 +66,14 @@ def create_job(job: JobCreateRequest):
         "culture_traits": job.culture_traits
     }
 
-    application_link = f"http://localhost:8501/?job_id={job_id}"
+    FRONTEND_CANDIDATE_URL = os.getenv("FRONTEND_CANDIDATE_URL")
+
+    if not FRONTEND_CANDIDATE_URL:
+        FRONTEND_CANDIDATE_URL = "http://localhost:8501"  # fallback for local dev
+
+    application_link = f"{FRONTEND_CANDIDATE_URL}/?job_id={job_id}"
+
+
 
     return {
         "job_id": job_id,
@@ -248,3 +255,4 @@ def get_candidates_for_job(job_id: str):
 @app.get("/")
 def health_check():
     return {"status": "Backend is running"}
+
