@@ -19,7 +19,13 @@ def get_final_recommendation(interview_score: int) -> str:
     else:
         return "Not Recommended"
 
-app = FastAPI()
+app = FastAPI(
+    title="AI Hiring Backend",
+    version="1.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
+
 
 # -----------------------------
 # In-memory databases (MVP)
@@ -238,3 +244,7 @@ def get_candidates_for_job(job_id: str):
             if c["job_id"] == job_id
         ]
     }
+
+@app.get("/")
+def health_check():
+    return {"status": "Backend is running"}
