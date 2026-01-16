@@ -1,5 +1,15 @@
 import streamlit as st
 import requests
+import os
+
+BACKEND_URL = st.secrets.get("BACKEND_URL")
+
+if not BACKEND_URL:
+    st.error("Backend URL not configured")
+    st.stop()
+
+
+
 
 BACKEND_URL = "http://127.0.0.1:8000"
 
@@ -30,17 +40,24 @@ if st.button("Submit Application"):
             r = requests.post(
                 f"{BACKEND_URL}/jobs/{job_id}/upload_resume",
                 files=files,
+                data=data,
+
                 timeout=120
 
             )
-        except requests.exceptions.Timeout:
+        except requests.exceptions.ConnectionError:
             st.warning("Backend is waking up. Please click Submit again in a few seconds.")
             st.stop()
+        except requests.exceptions.Timeout:
+            st.error("Backend took too long. Please retry.")
+            st.stop()
+
 
 
         if r.status_code == 200:
             st.success("Application submitted successfully!")
         else:
             st.error("Submission failed")
+
 
 
