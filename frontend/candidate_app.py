@@ -29,7 +29,7 @@ if st.button("Submit Application"):
 
             r = requests.post(
                 f"{BACKEND_URL}/jobs/{job_id}/upload_resume",
-                files=files
+                files=files,
                 timeout=120
 
             )
@@ -42,4 +42,5 @@ if st.button("Submit Application"):
             st.success("Application submitted successfully!")
         else:
             st.error("Submission failed")
+
 
