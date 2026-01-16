@@ -3,10 +3,10 @@ from pydantic import BaseModel
 import uuid
 import os
 
-from resume_parser import parse_resume
-from ai_scorer import score_resume
-from interview_ai import generate_interview_question, evaluate_interview
-from make_service import trigger_make_webhook
+from backend.resume_parser import parse_resume
+from backend.ai_scorer import score_resume
+from backend.interview_ai import generate_interview_question, evaluate_interview
+from backend.make_service import trigger_make_webhook
 
 # -----------------------------
 # Recommendation Logic
@@ -266,6 +266,7 @@ def get_candidates_for_job(job_id: str):
 @app.get("/")
 def health_check():
     return {"status": "Backend is running"}
+
 
 
 
