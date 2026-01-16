@@ -39,7 +39,7 @@ if st.button("Create Job"):
                 res = requests.post(
                     f"{BACKEND_URL}/jobs/create",
                     json=payload,
-                    timeout=15
+                    timeout=60
                 )
 
             if res.status_code == 200:
@@ -55,4 +55,5 @@ if st.button("Create Job"):
             st.error("⏳ Backend timeout. Please retry.")
         except Exception as e:
             st.error(f"Unexpected error: {e}")
+
 
