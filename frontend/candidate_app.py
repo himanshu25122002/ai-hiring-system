@@ -25,12 +25,21 @@ if st.button("Submit Application"):
         st.error("All fields are required")
     else:
         files = {"file": resume}
-        r = requests.post(
-            f"{BACKEND_URL}/jobs/{job_id}/upload_resume",
-            files=files
-        )
+        try:
+
+            r = requests.post(
+                f"{BACKEND_URL}/jobs/{job_id}/upload_resume",
+                files=files
+                timeout=120
+
+            )
+        except requests.exceptions.Timeout:
+            st.warning("Backend is waking up. Please click Submit again in a few seconds.")
+            st.stop()
+
 
         if r.status_code == 200:
             st.success("Application submitted successfully!")
         else:
             st.error("Submission failed")
+
