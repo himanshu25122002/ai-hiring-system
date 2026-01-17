@@ -144,14 +144,19 @@ if GOOGLE_SHEET_CSV_URL:
     # ✅ Display ONLY existing columns
         visible_columns = [
             col for col in [
+               
+                "job_id",
+                "role",
+                "candidate_id",
                 "name",
                 "email",
                 "skills",
                 "experience_years",
                 "score",
                 "shortlisted",
-                "confidence",
-                "resume_file"
+                "resume_file",
+                "confidence"
+
             ]
             if col in df.columns
         ]
@@ -169,5 +174,6 @@ if GOOGLE_SHEET_CSV_URL:
 
 else:
     st.info("Google Sheet CSV link not configured")
+
 
 
