@@ -41,3 +41,13 @@ def append_candidate(row: dict):
         row["resume_file"],
         row["confidence"]
     ])
+def append_interview_qna(row: dict):
+    worksheet = client.open(SHEET_NAME).worksheet("interview_qna")
+    worksheet.append_row([
+        row["candidate_id"],
+        row["question_no"],
+        row["question"],
+        row["answer"]
+    ])
+
+
