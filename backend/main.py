@@ -6,6 +6,7 @@ import os
 from backend.schemas import JobInput
 from backend.resume_parser import parse_resume
 from backend.ai_scorer import score_resume
+from backend.resume_extractor import extract_resume_data
 
 app = FastAPI(
     title="AI Resume Screening Backend",
@@ -54,6 +55,12 @@ async def screen_resumes(
         # -------- Resume Parsing --------
         resume_text = parse_resume(file_path)
 
+        parsed_data = extract_resume_data(
+            resume_text=resume_text,
+            required_skills=job_data["required_skills"]
+        )
+
+
         # -------- AI Scoring --------
         score_result = score_resume(
             job_description=role + " " + required_skills,
@@ -65,9 +72,9 @@ async def screen_resumes(
         job_data["candidates"].append({
             "candidate_id": candidate_id,
             "file_name": resume.filename,
-            "parsed_resume": resume_text,   # ✅ THIS IS YOUR PARSED DATA
+            "parsed": parsed_data,
             "score": score_result["score"],
-            "shortlisted": score_result["score"] >= 70
+            "shortlisted": score_result["score"] >= 90
         })
 
     screening_db[job_id] = job_data
@@ -96,3 +103,4 @@ def get_screening_results(job_id: str):
 @app.get("/")
 def health():
     return {"status": "Backend running"}
+
