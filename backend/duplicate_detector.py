@@ -4,7 +4,7 @@ def text_similarity(a: str, b: str) -> float:
     return SequenceMatcher(None, a, b).ratio()
 
 
-def is_duplicate(candidate, existing_candidates, threshold=0.90):
+def is_duplicate_resume(candidate, existing_candidates, threshold=0.90):
     """
     Checks if a candidate resume is duplicate
     """
