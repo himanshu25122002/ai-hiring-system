@@ -13,6 +13,7 @@ from backend.google_drive import (
     list_files_in_folder,
     download_file
 )
+from backend.email_validator import calculate_email_confidence
 
 app = FastAPI(
     title="AI Resume Screening Backend",
@@ -65,6 +66,12 @@ async def screen_resumes(
             resume_text=resume_text,
             required_skills=job_data["required_skills"]
         )
+        email_confidence = calculate_email_confidence(
+            name=parsed_data.get("name", ""),
+            email=parsed_data.get("email", ""),
+            resume_text=resume_text
+        )
+
 
 
         # -------- AI Scoring --------
@@ -88,6 +95,7 @@ async def screen_resumes(
             "candidate_id": candidate_id,
             "name": parsed_data.get("name"),
             "email": parsed_data.get("email"),
+            "email_confidence": email_confidence,
             "skills": ", ".join(parsed_data.get("skills", [])),
             "experience_years": parsed_data.get("experience_years"),
             "score": score_result["score"],
@@ -95,6 +103,8 @@ async def screen_resumes(
             "resume_file": resume.filename,
             "confidence": parsed_data.get("confidence")
         })
+
+
     
     
     screening_db[job_id] = job_data
@@ -203,6 +213,7 @@ def get_screening_results(job_id: str):
 @app.get("/")
 def health():
     return {"status": "Backend running"}
+
 
 
 
