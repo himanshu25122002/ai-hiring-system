@@ -4,3 +4,5 @@ pdfplumber
 python-docx
 python-multipart
 requests
+gspread
+google-auth
