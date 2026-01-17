@@ -123,40 +123,51 @@ if GOOGLE_SHEET_CSV_URL:
     try:
         df = pd.read_csv(GOOGLE_SHEET_CSV_URL)
 
-        # Optional filter by job_id
+        if df.empty:
+            st.info("No candidates yet. Upload resumes to begin.")
+            st.stop()
+
+    # Optional filter by job_id
         job_id = st.session_state.get("job_id")
-        if job_id:
+        if job_id and "job_id" in df.columns:
             df = df[df["job_id"] == job_id]
 
-        # Sort by rank score
-        df = df.sort_values("rank_score", ascending=False)
+    # 🔐 SAFE sort (only if column exists)
+        if "score" in df.columns:
+            df = df.sort_values("score", ascending=False)
 
-        # Filters
+    # Shortlist filter
         show_shortlisted = st.checkbox("Show only shortlisted candidates")
-
-        if show_shortlisted:
+        if show_shortlisted and "shortlisted" in df.columns:
             df = df[df["shortlisted"] == True]
 
+    # ✅ Display ONLY existing columns
+        visible_columns = [
+            col for col in [
+                "name",
+                "email",
+                "skills",
+                "experience_years",
+                "score",
+                "shortlisted",
+                "confidence",
+                "resume_file"
+            ]
+            if col in df.columns
+        ]
+
         st.dataframe(
-            df[
-                [
-                    "rank",
-                    "name",
-                    "email",
-                    "score",
-                    "rank_score",
-                    "interview_score",
-                    "recommendation",
-                    "shortlisted",
-                    "confidence"
-                ]
-            ],
+            df[visible_columns],
             use_container_width=True
         )
 
     except Exception as e:
-        st.warning("Google Sheet not accessible yet")
+        st.error("Failed to read Google Sheet")
+        st.exception(e)
+
+
 
 else:
     st.info("Google Sheet CSV link not configured")
+
 
