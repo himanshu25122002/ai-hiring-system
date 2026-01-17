@@ -14,7 +14,7 @@ from backend.google_drive import (
     download_file
 )
 from backend.email_validator import calculate_email_confidence
-
+from backend.ranker import rank_candidates
 app = FastAPI(
     title="AI Resume Screening Backend",
     version="2.0"
@@ -73,6 +73,10 @@ async def screen_resumes(
         )
 
 
+        parsed_data["email_confidence"] = email_confidence
+
+
+
 
         # -------- AI Scoring --------
         score_result = score_resume(
@@ -102,11 +106,14 @@ async def screen_resumes(
             "shortlisted": shortlisted,
             "resume_file": resume.filename,
             "confidence": parsed_data.get("confidence")
+            "rank": candidate["rank"],
+            "rank_score": round(candidate["rank_score"], 2)
+
         })
 
 
     
-    
+    job_data["candidates"] = rank_candidates(job_data["candidates"])
     screening_db[job_id] = job_data
 
     return {
@@ -156,30 +163,26 @@ async def screen_resumes_from_drive(
             required_skills=[s.strip() for s in required_skills.split(",")]
         )
 
+         email_confidence = calculate_email_confidence(
+            name=parsed_data.get("name", ""),
+            email=parsed_data.get("email", ""),
+            resume_text=resume_text
+        )
+
+
+        parsed_data["email_confidence"] = email_confidence
+
+
         score_result = score_resume(
             job_description=f"{role} {required_skills}",
             resume_text=resume_text
         )
 
         candidate_id = str(uuid.uuid4())[:8]
-        shortlisted = score_result["score"] >= 70
+        shortlisted = score_result["score"] >= 90
 
         # -------- Save to Google Sheets --------
-        append_candidate({
-            "job_id": job_id,
-            "role": role,
-            "candidate_id": candidate_id,
-            "name": parsed_data.get("name"),
-            "email": parsed_data.get("email"),
-            "skills": ", ".join(parsed_data.get("skills", [])),
-            "experience_years": parsed_data.get("experience_years"),
-            "score": score_result["score"],
-            "shortlisted": shortlisted,
-            "resume_file": file["name"],
-            "confidence": parsed_data.get("confidence")
-        })
-
-        job_data["candidates"].append({
+       job_data["candidates"].append({
             "candidate_id": candidate_id,
             "name": parsed_data.get("name"),
             "email": parsed_data.get("email"),
@@ -187,6 +190,26 @@ async def screen_resumes_from_drive(
             "shortlisted": shortlisted
         })
 
+        append_candidate({
+            "job_id": job_id,
+            "role": role,
+            "candidate_id": candidate_id,
+            "name": parsed_data.get("name"),
+            "email": parsed_data.get("email"),
+            "email_confidence": email_confidence,
+            "skills": ", ".join(parsed_data.get("skills", [])),
+            "experience_years": parsed_data.get("experience_years"),
+            "score": score_result["score"],
+            "shortlisted": shortlisted,
+            "resume_file": resume.filename,
+            "confidence": parsed_data.get("confidence")
+            "rank": candidate["rank"],
+            "rank_score": round(candidate["rank_score"], 2)
+
+        })
+
+        
+    job_data["candidates"] = rank_candidates(job_data["candidates"])
     screening_db[job_id] = job_data
 
     return {
@@ -213,6 +236,7 @@ def get_screening_results(job_id: str):
 @app.get("/")
 def health():
     return {"status": "Backend running"}
+
 
 
 
