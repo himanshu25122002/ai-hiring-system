@@ -145,6 +145,8 @@ if GOOGLE_SHEET_CSV_URL:
                     "email",
                     "score",
                     "rank_score",
+                    "interview_score",
+                    "recommendation",
                     "shortlisted",
                     "confidence"
                 ]
@@ -157,3 +159,4 @@ if GOOGLE_SHEET_CSV_URL:
 
 else:
     st.info("Google Sheet CSV link not configured")
+
