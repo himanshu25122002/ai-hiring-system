@@ -1,28 +1,159 @@
 import streamlit as st
 import requests
+import pandas as pd
+import os
 
-BACKEND_URL = "http://127.0.0.1:8000"
+# -----------------------------
+# CONFIG
+# -----------------------------
+BACKEND_URL = st.secrets.get("BACKEND_URL", "http://127.0.0.1:8000")
+GOOGLE_SHEET_CSV_URL = st.secrets.get(
+    "GOOGLE_SHEET_CSV_URL",
+    ""  # public CSV export link
+)
 
-st.title("HR Dashboard")
+st.set_page_config(
+    page_title="HR Resume Screening Dashboard",
+    layout="wide"
+)
 
-job_id = st.text_input("Enter Job ID")
+st.title("🧑‍💼 AI Resume Screening – HR Dashboard")
 
-if st.button("Fetch Candidates"):
-    response = requests.get(f"{BACKEND_URL}/jobs/{job_id}/candidates")
+# -----------------------------
+# JOB INPUT SECTION
+# -----------------------------
+st.subheader("📌 Job Details")
 
-    if response.status_code != 200:
-        st.error("Invalid Job ID")
-    else:
-        data = response.json()["candidates"]
+col1, col2 = st.columns(2)
 
-        if not data:
-            st.info("No candidates yet")
-        else:
-            for c in data:
-                st.subheader(f"Candidate ID: {c['candidate_id']}")
-                st.write("Resume Score:", c["score"])
-                st.write("Shortlisted:", c["shortlisted"])
-                st.write("Interview Completed:", c["interview_completed"])
-                st.write("Interview Score:", c["interview_score"])
-                st.write("Final Recommendation:", c["final_recommendation"])
-                st.divider()
+with col1:
+    role = st.text_input("Job Role")
+    required_skills = st.text_input("Required Skills (comma-separated)")
+
+with col2:
+    experience_level = st.text_input("Experience Level")
+    culture_traits = st.text_input("Culture Traits (optional)")
+
+st.divider()
+
+# -----------------------------
+# RESUME INPUT SECTION
+# -----------------------------
+st.subheader("📂 Resume Input")
+
+upload_mode = st.radio(
+    "Choose resume source",
+    ["Upload Multiple Resumes", "Google Drive Folder Link"]
+)
+
+resumes = None
+drive_link = None
+
+if upload_mode == "Upload Multiple Resumes":
+    resumes = st.file_uploader(
+        "Upload resumes (PDF/DOCX)",
+        type=["pdf", "docx"],
+        accept_multiple_files=True
+    )
+else:
+    drive_link = st.text_input("Google Drive Folder Link")
+
+st.divider()
+
+# -----------------------------
+# START SCREENING
+# -----------------------------
+if st.button("🚀 Start Resume Screening"):
+    if not role or not required_skills or not experience_level:
+        st.error("Please fill all required job details")
+        st.stop()
+
+    with st.spinner("Processing resumes..."):
+        try:
+            if upload_mode == "Upload Multiple Resumes":
+                if not resumes:
+                    st.error("Please upload resumes")
+                    st.stop()
+
+                files = [("resumes", r) for r in resumes]
+
+                response = requests.post(
+                    f"{BACKEND_URL}/screen-resumes",
+                    data={
+                        "role": role,
+                        "required_skills": required_skills,
+                        "experience_level": experience_level,
+                        "culture_traits": culture_traits
+                    },
+                    files=files,
+                    timeout=300
+                )
+
+            else:
+                response = requests.post(
+                    f"{BACKEND_URL}/screen-drive-folder",
+                    json={
+                        "role": role,
+                        "required_skills": required_skills,
+                        "experience_level": experience_level,
+                        "culture_traits": culture_traits,
+                        "drive_folder_link": drive_link
+                    },
+                    timeout=300
+                )
+
+            if response.status_code == 200:
+                data = response.json()
+                st.success("✅ Resume screening completed")
+                st.session_state["job_id"] = data["job_id"]
+            else:
+                st.error("Screening failed")
+
+        except Exception as e:
+            st.error(f"Error: {e}")
+
+st.divider()
+
+# -----------------------------
+# VIEW RESULTS FROM GOOGLE SHEETS
+# -----------------------------
+st.subheader("📊 Ranked Candidates")
+
+if GOOGLE_SHEET_CSV_URL:
+    try:
+        df = pd.read_csv(GOOGLE_SHEET_CSV_URL)
+
+        # Optional filter by job_id
+        job_id = st.session_state.get("job_id")
+        if job_id:
+            df = df[df["job_id"] == job_id]
+
+        # Sort by rank score
+        df = df.sort_values("rank_score", ascending=False)
+
+        # Filters
+        show_shortlisted = st.checkbox("Show only shortlisted candidates")
+
+        if show_shortlisted:
+            df = df[df["shortlisted"] == True]
+
+        st.dataframe(
+            df[
+                [
+                    "rank",
+                    "name",
+                    "email",
+                    "score",
+                    "rank_score",
+                    "shortlisted",
+                    "confidence"
+                ]
+            ],
+            use_container_width=True
+        )
+
+    except Exception as e:
+        st.warning("Google Sheet not accessible yet")
+
+else:
+    st.info("Google Sheet CSV link not configured")
