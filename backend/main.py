@@ -1,273 +1,98 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form
-from pydantic import BaseModel
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from typing import List
 import uuid
 import os
 
+from backend.schemas import JobInput
 from backend.resume_parser import parse_resume
 from backend.ai_scorer import score_resume
-from backend.interview_ai import generate_interview_question, evaluate_interview
-from backend.make_service import trigger_make_webhook
-
-# -----------------------------
-# Recommendation Logic
-# -----------------------------
-def get_final_recommendation(interview_score: int) -> str:
-    if interview_score >= 75:
-        return "Strong Fit"
-    elif interview_score >= 50:
-        return "Moderate Fit"
-    else:
-        return "Not Recommended"
 
 app = FastAPI(
-    title="AI Hiring Backend",
-    version="1.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
+    title="AI Resume Screening Backend",
+    version="2.0"
 )
-
-
-# -----------------------------
-# In-memory databases (MVP)
-# -----------------------------
-jobs_db = {}
-candidates_db = {}
 
 UPLOAD_DIR = "uploaded_resumes"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# -----------------------------
-# Models
-# -----------------------------
-class JobCreateRequest(BaseModel):
-    job_title: str
-    job_description: str
-    skills: str
-    experience: str
-    calendly_link: str
-    culture_traits: str | None = None
+# In-memory store (later Google Sheets / DB)
+screening_db = {}
 
+# -------------------------------------------------
+# STEP 1: HR submits job + multiple resumes
+# -------------------------------------------------
+@app.post("/screen-resumes")
+async def screen_resumes(
+    role: str = Form(...),
+    required_skills: str = Form(...),   # comma-separated
+    experience_level: str = Form(...),
+    culture_traits: str = Form(""),
+    resumes: List[UploadFile] = File(...)
+):
+    if not resumes:
+        raise HTTPException(status_code=400, detail="No resumes uploaded")
 
-class JobCreateResponse(BaseModel):
-    job_id: str
-    application_link: str
-
-# -----------------------------
-# Job Creation
-# -----------------------------
-@app.post("/jobs/create", response_model=JobCreateResponse)
-def create_job(job: JobCreateRequest):
     job_id = str(uuid.uuid4())[:8]
 
-    jobs_db[job_id] = {
-        "job_title": job.job_title,
-        "job_description": job.job_description,
-        "skills": job.skills,
-        "experience": job.experience,
-        "calendly_link": job.calendly_link,
-        "culture_traits": job.culture_traits
-    }
-
-    FRONTEND_CANDIDATE_URL = os.getenv("FRONTEND_CANDIDATE_URL")
-
-    if not FRONTEND_CANDIDATE_URL:
-        FRONTEND_CANDIDATE_URL = "http://localhost:8501"  # fallback for local dev
-
-    application_link = f"{FRONTEND_CANDIDATE_URL}/?job_id={job_id}"
-
-
-
-    return {
+    job_data = {
         "job_id": job_id,
-        "application_link": application_link
+        "role": role,
+        "required_skills": [s.strip() for s in required_skills.split(",")],
+        "experience_level": experience_level,
+        "culture_traits": [c.strip() for c in culture_traits.split(",") if c],
+        "candidates": []
     }
 
-# -----------------------------
-# Resume Upload + Scoring + Shortlisting
-# -----------------------------
-@app.post("/jobs/{job_id}/upload_resume")
-async def upload_resume(
-    job_id: str,
-    name: str = Form(...),
-    email: str = Form(...),
-    file: UploadFile = File(...)
-):
-    if job_id not in jobs_db:
-        raise HTTPException(status_code=404, detail="Job not found")
+    for resume in resumes:
+        if not resume.filename.endswith((".pdf", ".docx")):
+            continue
 
-    if not file.filename.endswith((".pdf", ".docx")):
-        raise HTTPException(status_code=400, detail="Only PDF or DOCX allowed")
+        file_path = f"{UPLOAD_DIR}/{job_id}_{resume.filename}"
+        with open(file_path, "wb") as f:
+            f.write(await resume.read())
 
-    file_path = os.path.join(UPLOAD_DIR, f"{job_id}_{file.filename}")
+        # -------- Resume Parsing --------
+        resume_text = parse_resume(file_path)
 
-    with open(file_path, "wb") as f:
-        f.write(await file.read())
-
-    # Resume Parsing
-    resume_text = parse_resume(file_path)
-
-    # AI Resume Scoring
-    score_result = score_resume(
-        job_description=jobs_db[job_id]["job_description"],
-        resume_text=resume_text
-    )
-
-    candidate_id = str(uuid.uuid4())[:8]
-    shortlisted = score_result["score"] >= 70
-
-    candidates_db[candidate_id] = {
-        "candidate_id": candidate_id,
-        "job_id": job_id,
-        "name": name,
-        "email": email,
-        "resume_text": resume_text,
-        "score": score_result["score"],
-        "shortlisted": shortlisted,
-        "structured_form_filled": False,
-        "structured_data": {}
-    }
-
-    # -----------------------------
-    # MAKE – EMAIL #1 (Structured Data Form)
-    # -----------------------------
-    if shortlisted:
-        trigger_make_webhook(
-            os.getenv("MAKE_SHORTLIST_WEBHOOK"),
-            {
-                "name": name,
-                "email": email,
-                "job_title": jobs_db[job_id]["job_title"],
-                "structured_form_link": "https://forms.gle/CrzrDUNv1Js2gWoj6"
-            }
+        # -------- AI Scoring --------
+        score_result = score_resume(
+            job_description=role + " " + required_skills,
+            resume_text=resume_text
         )
 
+        candidate_id = str(uuid.uuid4())[:8]
+
+        job_data["candidates"].append({
+            "candidate_id": candidate_id,
+            "file_name": resume.filename,
+            "parsed_resume": resume_text,   # ✅ THIS IS YOUR PARSED DATA
+            "score": score_result["score"],
+            "shortlisted": score_result["score"] >= 70
+        })
+
+    screening_db[job_id] = job_data
+
     return {
-        "message": "Resume uploaded, parsed & scored",
-        "candidate_id": candidate_id,
-        "shortlisted": shortlisted,
-        "score": score_result["score"]
+        "message": "Bulk resumes processed successfully",
+        "job_id": job_id,
+        "total_resumes": len(job_data["candidates"]),
+        "shortlisted": len([c for c in job_data["candidates"] if c["shortlisted"]])
     }
 
-# -----------------------------
-# SEND AI INTERVIEW LINK (EMAIL #2)
-# -----------------------------
-@app.post("/candidates/{candidate_id}/send-interview-link")
-def send_interview_link(candidate_id: str):
-    candidate = candidates_db.get(candidate_id)
-
-    if not candidate:
-        raise HTTPException(status_code=404, detail="Candidate not found")
-
-    FRONTEND_INTERVIEW_URL = os.getenv("FRONTEND_INTERVIEW_URL")
-
-    if not FRONTEND_INTERVIEW_URL:
-        FRONTEND_INTERVIEW_URL = "http://localhost:8501"  # fallback for local dev
-
-    interview_link = f"{FRONTEND_INTERVIEW_URL}/?candidate_id={candidate_id}"
-
-
-
-    trigger_make_webhook(
-        os.getenv("MAKE_INTERVIEW_WEBHOOK"),
-        {
-            "name": candidate["name"],
-            "email": candidate["email"],
-            "interview_link": interview_link
-        }
-    )
-
-    return {"message": "AI interview link sent"}
-
-# -----------------------------
-# AI INTERVIEW
-# -----------------------------
-@app.post("/candidates/{candidate_id}/start-interview")
-def start_interview(candidate_id: str):
-    candidate = candidates_db.get(candidate_id)
-
-    if not candidate or not candidate["shortlisted"]:
-        raise HTTPException(status_code=403, detail="Not allowed")
-
-    candidate["interview_started"] = True
-    candidate["interview_completed"] = False
-    candidate["interview_qna"] = []
-
-    question = generate_interview_question(
-        jobs_db[candidate["job_id"]]["job_description"],
-        candidate["resume_text"],
-        []
-    )
-
-    return {"question": question}
-
-@app.post("/candidates/{candidate_id}/answer")
-def submit_answer(candidate_id: str, answer: str):
-    candidate = candidates_db.get(candidate_id)
-
-    if not candidate or not candidate.get("interview_started"):
-        raise HTTPException(status_code=400, detail="Interview not started")
-
-    candidate["interview_qna"].append({"answer": answer})
-
-    if len(candidate["interview_qna"]) >= 5:
-        evaluation = evaluate_interview(candidate["interview_qna"])
-        final_reco = get_final_recommendation(evaluation["score"])
-
-        candidate["interview_completed"] = True
-        candidate["interview_score"] = evaluation["score"]
-        candidate["final_recommendation"] = final_reco
-
-        # -----------------------------
-        # MAKE – EMAIL #3 (Final Interview Scheduling)
-        # -----------------------------
-        if final_reco in ["Strong Fit", "Moderate Fit"]:
-
-            job = jobs_db[candidate["job_id"]]
-            trigger_make_webhook(
-                os.getenv("MAKE_FINAL_WEBHOOK"),
-                {
-                    "name": candidate["name"],
-                    "email": candidate["email"],
-                    "calendly_link": job["calendly_link"]
-                }
-            )
-
-        return {
-            "message": "Interview completed",
-            "score": evaluation["score"],
-            "recommendation": final_reco
-        }
-
-    return {"next_question": "Please continue"}
-
-# -----------------------------
-# HR DASHBOARD
-# -----------------------------
-@app.get("/jobs/{job_id}/candidates")
-def get_candidates_for_job(job_id: str):
-    if job_id not in jobs_db:
+# -------------------------------------------------
+# HR: View parsed + scored resumes
+# -------------------------------------------------
+@app.get("/jobs/{job_id}/results")
+def get_screening_results(job_id: str):
+    job = screening_db.get(job_id)
+    if not job:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    return {
-        "job_id": job_id,
-        "candidates": [
-            {
-                "candidate_id": c["candidate_id"],
-                "name": c["name"],
-                "email": c["email"],
-                "score": c["score"],
-                "final_recommendation": c.get("final_recommendation")
-            }
-            for c in candidates_db.values()
-            if c["job_id"] == job_id
-        ]
-    }
+    return job
 
+# -------------------------------------------------
+# Health check
+# -------------------------------------------------
 @app.get("/")
-def health_check():
-    return {"status": "Backend is running"}
-
-
-
-
-
+def health():
+    return {"status": "Backend running"}
