@@ -1,27 +1,23 @@
-# backend/google_sheets.py
-
 import gspread
-from google.oauth2.service_account import Credentials
-import os
 import json
+import os
+from google.oauth2.service_account import Credentials
 
-# Scope for Google Sheets
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets"
 ]
 
-# Sheet & Worksheet names
 SPREADSHEET_NAME = "AI Hiring - Candidates Database"
 WORKSHEET_NAME = "Candidates"
 
 
 def get_sheet():
-    """
-    Authorize and return Google Sheet worksheet
-    """
-    service_account_info = json.loads(
-        os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
-    )
+    service_account_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+
+    if not service_account_json:
+        raise RuntimeError("GOOGLE_SERVICE_ACCOUNT_JSON env variable not set")
+
+    service_account_info = json.loads(service_account_json)
 
     creds = Credentials.from_service_account_info(
         service_account_info,
@@ -34,9 +30,6 @@ def get_sheet():
 
 
 def append_candidate(row: dict):
-    """
-    Append one candidate row to Google Sheet
-    """
     sheet = get_sheet()
 
     sheet.append_row([
@@ -45,15 +38,10 @@ def append_candidate(row: dict):
         row.get("candidate_id"),
         row.get("name"),
         row.get("email"),
-        row.get("email_confidence"),
         row.get("skills"),
         row.get("experience_years"),
         row.get("score"),
-        row.get("rank"),
-        row.get("rank_score"),
         row.get("shortlisted"),
-        row.get("interview_score"),
-        row.get("final_recommendation"),
         row.get("resume_file"),
-        row.get("confidence"),
+        row.get("confidence")
     ])
