@@ -19,6 +19,7 @@ from backend.interview_ai import (
     generate_interview_question,
     evaluate_interview
 )
+from backend.make_service import trigger_make_webhook
 
 # -------------------------------------------------
 # App Init
@@ -91,7 +92,19 @@ async def screen_resumes(
         )
 
         candidate_id = str(uuid.uuid4())[:8]
-        shortlisted = score_result["score"] >= 70
+        shortlisted = score_result["score"] >= 90
+        if shortlisted:
+            trigger_make_webhook(
+                os.getenv("MAKE_SHORTLIST_WEBHOOK"),
+                {
+                    "job_id": job_id,
+                    "role": role,
+                    "candidate_id": candidate_id,
+                    "name": parsed_data.get("name"),
+                    "email": parsed_data.get("email"),
+                    "score": score_result["score"]
+                }
+            )
 
         job_data["candidates"].append({
             "candidate_id": candidate_id,
@@ -368,5 +381,6 @@ def get_screening_results(job_id: str):
 @app.get("/")
 def health():
     return {"status": "Backend running"}
+
 
 
