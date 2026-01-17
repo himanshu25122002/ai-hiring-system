@@ -3,18 +3,22 @@ from typing import List
 import uuid
 import os
 
-from backend.schemas import JobInput
 from backend.resume_parser import parse_resume
-from backend.ai_scorer import score_resume
 from backend.resume_extractor import extract_resume_data
+from backend.ai_scorer import score_resume
+from backend.email_validator import calculate_email_confidence
+from backend.duplicate_detector import is_duplicate_resume
+from backend.ranker import rank_candidates
 from backend.google_sheets import append_candidate
 from backend.google_drive import (
     extract_folder_id,
     list_files_in_folder,
     download_file
 )
-from backend.email_validator import calculate_email_confidence
-from backend.ranker import rank_candidates
+
+# -------------------------------------------------
+# App Init
+# -------------------------------------------------
 app = FastAPI(
     title="AI Resume Screening Backend",
     version="2.0"
@@ -23,12 +27,12 @@ app = FastAPI(
 UPLOAD_DIR = "uploaded_resumes"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# In-memory store (later Google Sheets / DB)
+# Cache only (Google Sheets = DB)
 screening_db = {}
 
-# -------------------------------------------------
-# STEP 1: HR submits job + multiple resumes
-# -------------------------------------------------
+# =================================================
+# STEP 1A: HR uploads MULTIPLE resumes (manual)
+# =================================================
 @app.post("/screen-resumes")
 async def screen_resumes(
     role: str = Form(...),
@@ -41,89 +45,97 @@ async def screen_resumes(
         raise HTTPException(status_code=400, detail="No resumes uploaded")
 
     job_id = str(uuid.uuid4())[:8]
+    required_skills_list = [s.strip() for s in required_skills.split(",")]
 
     job_data = {
         "job_id": job_id,
         "role": role,
-        "required_skills": [s.strip() for s in required_skills.split(",")],
+        "required_skills": required_skills_list,
         "experience_level": experience_level,
-        "culture_traits": [c.strip() for c in culture_traits.split(",") if c],
+        "culture_traits": culture_traits,
         "candidates": []
     }
 
     for resume in resumes:
-        if not resume.filename.endswith((".pdf", ".docx")):
+        if not resume.filename.lower().endswith((".pdf", ".docx")):
             continue
 
         file_path = f"{UPLOAD_DIR}/{job_id}_{resume.filename}"
         with open(file_path, "wb") as f:
             f.write(await resume.read())
 
-        # -------- Resume Parsing --------
         resume_text = parse_resume(file_path)
+
+        # ---- Duplicate Detection ----
+        if is_duplicate_resume(resume_text, job_data["candidates"]):
+            continue
 
         parsed_data = extract_resume_data(
             resume_text=resume_text,
-            required_skills=job_data["required_skills"]
+            required_skills=required_skills_list
         )
+
         email_confidence = calculate_email_confidence(
             name=parsed_data.get("name", ""),
             email=parsed_data.get("email", ""),
             resume_text=resume_text
         )
 
-
-        parsed_data["email_confidence"] = email_confidence
-
-
-
-
-        # -------- AI Scoring --------
         score_result = score_resume(
-            job_description=role + " " + required_skills,
+            job_description=f"{role} {required_skills}",
             resume_text=resume_text
         )
 
         candidate_id = str(uuid.uuid4())[:8]
+        shortlisted = score_result["score"] >= 70
 
         job_data["candidates"].append({
-            "candidate_id": candidate_id,
-            "file_name": resume.filename,
-            "resume_text": resume_text,
-            "parsed": parsed_data,
-            "score": score_result["score"],
-            "shortlisted": score_result["score"] >= 90
-        })
-         append_candidate({
-            "job_id": job_id,
-            "role": role,
             "candidate_id": candidate_id,
             "name": parsed_data.get("name"),
             "email": parsed_data.get("email"),
             "email_confidence": email_confidence,
-            "skills": ", ".join(parsed_data.get("skills", [])),
+            "skills": parsed_data.get("skills", []),
             "experience_years": parsed_data.get("experience_years"),
             "score": score_result["score"],
             "shortlisted": shortlisted,
             "resume_file": resume.filename,
-            "confidence": parsed_data.get("confidence")
-            "rank": candidate["rank"],
-            "rank_score": round(candidate["rank_score"], 2)
-
+            "confidence": parsed_data.get("confidence", 0)
         })
 
-
-    
+    # ---- Ranking ----
     job_data["candidates"] = rank_candidates(job_data["candidates"])
+
+    # ---- Save to Google Sheets ----
+    for candidate in job_data["candidates"]:
+        append_candidate({
+            "job_id": job_id,
+            "role": role,
+            "candidate_id": candidate["candidate_id"],
+            "name": candidate["name"],
+            "email": candidate["email"],
+            "email_confidence": candidate["email_confidence"],
+            "skills": ", ".join(candidate["skills"]),
+            "experience_years": candidate["experience_years"],
+            "score": candidate["score"],
+            "shortlisted": candidate["shortlisted"],
+            "resume_file": candidate["resume_file"],
+            "confidence": candidate["confidence"],
+            "rank": candidate["rank"],
+            "rank_score": round(candidate["rank_score"], 2)
+        })
+
     screening_db[job_id] = job_data
 
     return {
-        "message": "Bulk resumes processed successfully",
+        "message": "Resumes processed & ranked successfully",
         "job_id": job_id,
         "total_resumes": len(job_data["candidates"]),
         "shortlisted": len([c for c in job_data["candidates"] if c["shortlisted"]])
     }
 
+# =================================================
+# STEP 1B: HR provides GOOGLE DRIVE folder link
+# =================================================
 @app.post("/screen-resumes-from-drive")
 async def screen_resumes_from_drive(
     role: str = Form(...),
@@ -133,6 +145,7 @@ async def screen_resumes_from_drive(
     drive_folder_link: str = Form(...)
 ):
     job_id = str(uuid.uuid4())[:8]
+    required_skills_list = [s.strip() for s in required_skills.split(",")]
 
     folder_id = extract_folder_id(drive_folder_link)
     files = list_files_in_folder(folder_id)
@@ -143,11 +156,14 @@ async def screen_resumes_from_drive(
     job_data = {
         "job_id": job_id,
         "role": role,
+        "required_skills": required_skills_list,
+        "experience_level": experience_level,
+        "culture_traits": culture_traits,
         "candidates": []
     }
 
     for file in files:
-        if not file["name"].endswith((".pdf", ".docx")):
+        if not file["name"].lower().endswith((".pdf", ".docx")):
             continue
 
         file_path = download_file(
@@ -156,23 +172,21 @@ async def screen_resumes_from_drive(
             download_dir=UPLOAD_DIR
         )
 
-        # -------- Resume Parsing --------
         resume_text = parse_resume(file_path)
+
+        if is_duplicate_resume(resume_text, job_data["candidates"]):
+            continue
 
         parsed_data = extract_resume_data(
             resume_text=resume_text,
-            required_skills=[s.strip() for s in required_skills.split(",")]
+            required_skills=required_skills_list
         )
 
-         email_confidence = calculate_email_confidence(
+        email_confidence = calculate_email_confidence(
             name=parsed_data.get("name", ""),
             email=parsed_data.get("email", ""),
             resume_text=resume_text
         )
-
-
-        parsed_data["email_confidence"] = email_confidence
-
 
         score_result = score_resume(
             job_description=f"{role} {required_skills}",
@@ -180,66 +194,63 @@ async def screen_resumes_from_drive(
         )
 
         candidate_id = str(uuid.uuid4())[:8]
-        shortlisted = score_result["score"] >= 90
+        shortlisted = score_result["score"] >= 70
 
-        # -------- Save to Google Sheets --------
-       job_data["candidates"].append({
-            "candidate_id": candidate_id,
-            "name": parsed_data.get("name"),
-            "email": parsed_data.get("email"),
-            "score": score_result["score"],
-            "shortlisted": shortlisted
-        })
-
-        append_candidate({
-            "job_id": job_id,
-            "role": role,
+        job_data["candidates"].append({
             "candidate_id": candidate_id,
             "name": parsed_data.get("name"),
             "email": parsed_data.get("email"),
             "email_confidence": email_confidence,
-            "skills": ", ".join(parsed_data.get("skills", [])),
+            "skills": parsed_data.get("skills", []),
             "experience_years": parsed_data.get("experience_years"),
             "score": score_result["score"],
             "shortlisted": shortlisted,
-            "resume_file": resume.filename,
-            "confidence": parsed_data.get("confidence")
-            "rank": candidate["rank"],
-            "rank_score": round(candidate["rank_score"], 2)
-
+            "resume_file": file["name"],
+            "confidence": parsed_data.get("confidence", 0)
         })
 
-        
     job_data["candidates"] = rank_candidates(job_data["candidates"])
+
+    for candidate in job_data["candidates"]:
+        append_candidate({
+            "job_id": job_id,
+            "role": role,
+            "candidate_id": candidate["candidate_id"],
+            "name": candidate["name"],
+            "email": candidate["email"],
+            "email_confidence": candidate["email_confidence"],
+            "skills": ", ".join(candidate["skills"]),
+            "experience_years": candidate["experience_years"],
+            "score": candidate["score"],
+            "shortlisted": candidate["shortlisted"],
+            "resume_file": candidate["resume_file"],
+            "confidence": candidate["confidence"],
+            "rank": candidate["rank"],
+            "rank_score": round(candidate["rank_score"], 2)
+        })
+
     screening_db[job_id] = job_data
 
     return {
-        "message": "Google Drive resumes processed successfully",
+        "message": "Google Drive resumes processed & ranked successfully",
         "job_id": job_id,
         "total_resumes": len(job_data["candidates"]),
         "shortlisted": len([c for c in job_data["candidates"] if c["shortlisted"]])
     }
 
-# -------------------------------------------------
-# HR: View parsed + scored resumes
-# -------------------------------------------------
+# =================================================
+# HR: View Results
+# =================================================
 @app.get("/jobs/{job_id}/results")
 def get_screening_results(job_id: str):
     job = screening_db.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-
     return job
 
-# -------------------------------------------------
-# Health check
-# -------------------------------------------------
+# =================================================
+# Health Check
+# =================================================
 @app.get("/")
 def health():
     return {"status": "Backend running"}
-
-
-
-
-
-
