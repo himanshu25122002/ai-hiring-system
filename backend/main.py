@@ -89,6 +89,7 @@ async def screen_resumes(
         job_data["candidates"].append({
             "candidate_id": candidate_id,
             "file_name": resume.filename,
+            "resume_text": resume_text,
             "parsed": parsed_data,
             "score": score_result["score"],
             "shortlisted": score_result["score"] >= 90
@@ -236,6 +237,7 @@ def get_screening_results(job_id: str):
 @app.get("/")
 def health():
     return {"status": "Backend running"}
+
 
 
 
