@@ -249,7 +249,6 @@ def start_interview(candidate_id: str):
     candidate = None
     job = None
 
-    # Find candidate
     for job_data in screening_db.values():
         for c in job_data["candidates"]:
             if c["candidate_id"] == candidate_id:
@@ -260,7 +259,6 @@ def start_interview(candidate_id: str):
     if not candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
-    # Initialize interview state
     candidate["interview"] = {
         "started": True,
         "completed": False,
@@ -279,6 +277,7 @@ def start_interview(candidate_id: str):
         "round": 1
     }
 
+
 @app.post("/candidates/{candidate_id}/answer")
 def submit_interview_answer(
     candidate_id: str,
@@ -287,7 +286,6 @@ def submit_interview_answer(
     candidate = None
     job = None
 
-    # Find candidate
     for job_data in screening_db.values():
         for c in job_data["candidates"]:
             if c["candidate_id"] == candidate_id:
@@ -304,6 +302,7 @@ def submit_interview_answer(
     # Save Q&A
     interview["qna"].append({
         "round": round_no,
+        "question": "Dynamic AI Question",
         "answer": answer
     })
 
@@ -312,35 +311,35 @@ def submit_interview_answer(
         "job_id": job["job_id"],
         "candidate_id": candidate_id,
         "interview_round": round_no,
-        "question": "Generated dynamically",
+        "question": "Dynamic AI Question",
         "answer": answer
     })
 
-    # STOP after 5 questions
+    # Stop after 5 questions
     if round_no >= 5:
         evaluation = evaluate_interview(interview["qna"])
-        interview["completed"] = True
-        interview["evaluation"] = evaluation
 
-        # Save FINAL EVALUATION to Google Sheets
+        candidate["interview"]["completed"] = True
+        candidate["interview"]["evaluation"] = evaluation
+
+        # Save FINAL evaluation to Google Sheets
         append_candidate({
             "job_id": job["job_id"],
             "candidate_id": candidate_id,
-            "skill_fit": evaluation["skill_fit"],
-            "communication": evaluation["communication"],
-            "problem_solving": evaluation["problem_solving"],
-            "culture_fit": evaluation["culture_fit"],
-            "final_score": evaluation["final_score"],
-            "recommendation": evaluation["recommendation"],
-            "feedback": evaluation["feedback"]
+            "skill_fit": evaluation.get("skill_fit"),
+            "communication": evaluation.get("communication"),
+            "problem_solving": evaluation.get("problem_solving"),
+            "culture_fit": evaluation.get("culture_fit"),
+            "final_score": evaluation.get("final_score"),
+            "recommendation": evaluation.get("recommendation"),
+            "feedback": evaluation.get("feedback")
         })
 
         return {
-            "message": "Interview completed",
             "evaluation": evaluation
         }
 
-    # Generate NEXT QUESTION
+    # Generate NEXT question
     next_question = generate_interview_question(
         job_description=job["role"],
         resume_text=candidate.get("resume_text", ""),
@@ -348,9 +347,10 @@ def submit_interview_answer(
     )
 
     return {
-        "round": round_no + 1,
-        "question": next_question
+        "question": next_question,
+        "round": round_no + 1
     }
+
 
 # =================================================
 # HR: View Results
@@ -368,4 +368,5 @@ def get_screening_results(job_id: str):
 @app.get("/")
 def health():
     return {"status": "Backend running"}
+
 
