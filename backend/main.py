@@ -7,6 +7,7 @@ from backend.schemas import JobInput
 from backend.resume_parser import parse_resume
 from backend.ai_scorer import score_resume
 from backend.resume_extractor import extract_resume_data
+from backend.google_sheets import append_candidate
 
 app = FastAPI(
     title="AI Resume Screening Backend",
@@ -76,7 +77,21 @@ async def screen_resumes(
             "score": score_result["score"],
             "shortlisted": score_result["score"] >= 90
         })
-
+         append_candidate({
+            "job_id": job_id,
+            "role": role,
+            "candidate_id": candidate_id,
+            "name": parsed_data.get("name"),
+            "email": parsed_data.get("email"),
+            "skills": ", ".join(parsed_data.get("skills", [])),
+            "experience_years": parsed_data.get("experience_years"),
+            "score": score_result["score"],
+            "shortlisted": shortlisted,
+            "resume_file": resume.filename,
+            "confidence": parsed_data.get("confidence")
+        })
+    
+    
     screening_db[job_id] = job_data
 
     return {
@@ -103,4 +118,5 @@ def get_screening_results(job_id: str):
 @app.get("/")
 def health():
     return {"status": "Backend running"}
+
 
