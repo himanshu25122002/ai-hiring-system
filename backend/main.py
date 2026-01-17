@@ -15,6 +15,10 @@ from backend.google_drive import (
     list_files_in_folder,
     download_file
 )
+from backend.interview_ai import (
+    generate_interview_question,
+    evaluate_interview
+)
 
 # -------------------------------------------------
 # App Init
@@ -238,6 +242,116 @@ async def screen_resumes_from_drive(
         "shortlisted": len([c for c in job_data["candidates"] if c["shortlisted"]])
     }
 
+
+
+@app.post("/candidates/{candidate_id}/start-interview")
+def start_interview(candidate_id: str):
+    candidate = None
+    job = None
+
+    # Find candidate
+    for job_data in screening_db.values():
+        for c in job_data["candidates"]:
+            if c["candidate_id"] == candidate_id:
+                candidate = c
+                job = job_data
+                break
+
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    # Initialize interview state
+    candidate["interview"] = {
+        "started": True,
+        "completed": False,
+        "qna": []
+    }
+
+    question = generate_interview_question(
+        job_description=job["role"],
+        resume_text=candidate.get("resume_text", ""),
+        previous_qna=[]
+    )
+
+    return {
+        "candidate_id": candidate_id,
+        "question": question,
+        "round": 1
+    }
+
+@app.post("/candidates/{candidate_id}/answer")
+def submit_interview_answer(
+    candidate_id: str,
+    answer: str = Form(...)
+):
+    candidate = None
+    job = None
+
+    # Find candidate
+    for job_data in screening_db.values():
+        for c in job_data["candidates"]:
+            if c["candidate_id"] == candidate_id:
+                candidate = c
+                job = job_data
+                break
+
+    if not candidate or not candidate.get("interview", {}).get("started"):
+        raise HTTPException(status_code=400, detail="Interview not started")
+
+    interview = candidate["interview"]
+    round_no = len(interview["qna"]) + 1
+
+    # Save Q&A
+    interview["qna"].append({
+        "round": round_no,
+        "answer": answer
+    })
+
+    # Save EACH Q&A to Google Sheets
+    append_candidate({
+        "job_id": job["job_id"],
+        "candidate_id": candidate_id,
+        "interview_round": round_no,
+        "question": "Generated dynamically",
+        "answer": answer
+    })
+
+    # STOP after 5 questions
+    if round_no >= 5:
+        evaluation = evaluate_interview(interview["qna"])
+        interview["completed"] = True
+        interview["evaluation"] = evaluation
+
+        # Save FINAL EVALUATION to Google Sheets
+        append_candidate({
+            "job_id": job["job_id"],
+            "candidate_id": candidate_id,
+            "skill_fit": evaluation["skill_fit"],
+            "communication": evaluation["communication"],
+            "problem_solving": evaluation["problem_solving"],
+            "culture_fit": evaluation["culture_fit"],
+            "final_score": evaluation["final_score"],
+            "recommendation": evaluation["recommendation"],
+            "feedback": evaluation["feedback"]
+        })
+
+        return {
+            "message": "Interview completed",
+            "evaluation": evaluation
+        }
+
+    # Generate NEXT QUESTION
+    next_question = generate_interview_question(
+        job_description=job["role"],
+        resume_text=candidate.get("resume_text", ""),
+        previous_qna=interview["qna"]
+    )
+
+    return {
+        "round": round_no + 1,
+        "question": next_question
+    }
+
 # =================================================
 # HR: View Results
 # =================================================
@@ -254,3 +368,4 @@ def get_screening_results(job_id: str):
 @app.get("/")
 def health():
     return {"status": "Backend running"}
+
