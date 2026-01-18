@@ -41,7 +41,13 @@ def append_candidate(row: dict):
         row.get("skills"),
         row.get("experience_years"),
         row.get("score"),
+        row.get("interview_score"),
+        row.get("rank"),
+        row.get("rank_score"),
+        row.get("recommendation"),
         row.get("shortlisted"),
         row.get("resume_file"),
         row.get("confidence")
     ])
+
+
