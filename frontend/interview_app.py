@@ -59,87 +59,84 @@ st.markdown("""
 # HEADER
 # -----------------------------
 st.markdown("<h2 style='text-align:center;'>🎤 AI Interview</h2>", unsafe_allow_html=True)
-st.markdown("<p style='text-align:center;color:gray;'>You may speak or type your answer.</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center;color:gray;'>Answer naturally — speak or type.</p>", unsafe_allow_html=True)
 
 # -----------------------------
-# GET candidate_id
+# READ candidate_id
 # -----------------------------
 candidate_id = st.query_params.get("candidate_id")
 if isinstance(candidate_id, list):
     candidate_id = candidate_id[0]
 
 if not candidate_id:
-    st.error("Invalid interview link")
+    st.error("❌ Invalid interview link")
     st.stop()
 
 # -----------------------------
 # SESSION STATE
 # -----------------------------
-if "started" not in st.session_state:
-    st.session_state.started = False
+if "start_time" not in st.session_state:
     st.session_state.start_time = time.time()
-    st.session_state.question = ""
-    st.session_state.round = 0
+    st.session_state.question = None
+    st.session_state.q_count = 0
     st.session_state.answer = ""
     st.session_state.chat = []
-    st.session_state.spoken = False
     st.session_state.thinking_done = False
+    st.session_state.final_score = None
+    st.session_state.feedback = None
 
 # -----------------------------
 # TOTAL TIME LIMIT
 # -----------------------------
-if (time.time() - st.session_state.start_time) / 60 > TOTAL_INTERVIEW_MINUTES:
+elapsed = (time.time() - st.session_state.start_time) / 60
+if elapsed > TOTAL_INTERVIEW_MINUTES:
     st.error("⏰ Interview time limit exceeded")
     st.stop()
 
 # -----------------------------
 # START INTERVIEW
 # -----------------------------
-if not st.session_state.started:
-    if st.button("🚀 Start Interview"):
-        r = requests.post(
-            f"{BACKEND_URL}/candidates/{candidate_id}/start-interview",
-            timeout=60
-        )
-        data = r.json()
-
-        st.session_state.started = True
-        st.session_state.question = data["question"]
-        st.session_state.round = 1
-        st.session_state.chat.append(("ai", data["question"]))
-        st.session_state.spoken = False
-        st.rerun()
+if st.session_state.question is None:
+    res = requests.post(
+        f"{BACKEND_URL}/candidates/{candidate_id}/start-interview"
+    )
+    data = res.json()
+    st.session_state.question = data["question"]
+    st.session_state.q_count = 1
+    st.session_state.chat.append(("ai", st.session_state.question))
 
 # -----------------------------
-# PROGRESS
+# PROGRESS BAR
 # -----------------------------
-if st.session_state.started:
-    st.progress(st.session_state.round / MAX_QUESTIONS)
+st.progress(st.session_state.q_count / MAX_QUESTIONS)
 
 # -----------------------------
-# CHAT UI
+# CHAT DISPLAY
 # -----------------------------
 st.markdown("<div class='chat-container'>", unsafe_allow_html=True)
+
 for role, msg in st.session_state.chat:
     if role == "ai":
         st.markdown(f"<div class='ai-bubble'><b>AI:</b><br>{msg}</div>", unsafe_allow_html=True)
     else:
         st.markdown(f"<div class='user-bubble'><b>You:</b><br>{msg}</div>", unsafe_allow_html=True)
+
 st.markdown("</div>", unsafe_allow_html=True)
 
 # -----------------------------
-# TTS (SPEAK ONLY ONCE)
+# TTS – AI SPEAKS
 # -----------------------------
-if st.session_state.started and not st.session_state.spoken:
-    components.html(f"""
+components.html(
+    f"""
     <script>
-      const msg = new SpeechSynthesisUtterance("{st.session_state.question}");
+      const msg = new SpeechSynthesisUtterance(`{st.session_state.question}`);
       msg.lang = 'en-US';
       speechSynthesis.cancel();
       speechSynthesis.speak(msg);
     </script>
-    """, height=0)
-    st.session_state.spoken = True
+    """,
+    height=0
+)
 
 # -----------------------------
 # THINKING TIMER
@@ -147,81 +144,95 @@ if st.session_state.started and not st.session_state.spoken:
 if not st.session_state.thinking_done:
     timer = st.empty()
     for i in range(THINKING_TIME_SECONDS, 0, -1):
-        timer.markdown(f"<div class='timer-box'>⏳ Think: {i}s</div>", unsafe_allow_html=True)
+        timer.markdown(f"<div class='timer-box'>⏳ Thinking time: {i}s</div>", unsafe_allow_html=True)
         time.sleep(1)
     timer.empty()
     st.session_state.thinking_done = True
 
 # -----------------------------
-# STT – MIC
+# STT – MIC BUTTON
 # -----------------------------
-components.html("""
-<script>
-function startMic() {
-  if (!('webkitSpeechRecognition' in window)) {
-    alert("Speech Recognition not supported in this browser.");
-    return;
-  }
-  const recognition = new webkitSpeechRecognition();
-  recognition.lang = "en-US";
-  recognition.onresult = (event) => {
-    const text = event.results[0][0].transcript;
-    window.parent.postMessage({type: "speech", text}, "*");
-  };
-  recognition.start();
-}
-</script>
-<button class="mic-btn" onclick="startMic()">🎤 Speak Answer</button>
-""", height=80)
+components.html(
+    """
+    <script>
+    let recognition;
+    function startMic() {
+        recognition = new webkitSpeechRecognition();
+        recognition.lang = "en-US";
+        recognition.onresult = function(event) {
+            const text = event.results[0][0].transcript;
+            window.parent.postMessage({ answer: text }, "*");
+        };
+        recognition.start();
+    }
+    </script>
 
-# Receive STT text
-speech = st.experimental_get_query_params()
-if "speech" in speech:
-    st.session_state.answer += " " + speech["speech"][0]
+    <button class="mic-btn" onclick="startMic()">🎤 Speak Answer</button>
+    """,
+    height=80
+)
 
 # -----------------------------
 # ANSWER INPUT
 # -----------------------------
-st.session_state.answer = st.text_area(
+answer = st.text_area(
     "Your Answer",
     value=st.session_state.answer,
     height=120
 )
+st.session_state.answer = answer
 
 # -----------------------------
 # SUBMIT ANSWER
 # -----------------------------
 if st.button("Submit Answer"):
-    if not st.session_state.answer.strip():
-        st.warning("Please answer before submitting")
+    if not answer.strip():
+        st.warning("Please provide an answer.")
         st.stop()
 
-    st.session_state.chat.append(("user", st.session_state.answer))
+    st.session_state.chat.append(("user", answer))
 
-    r = requests.post(
+    res = requests.post(
         f"{BACKEND_URL}/candidates/{candidate_id}/answer",
-        data={"answer": st.session_state.answer},
-        timeout=120
+        params={"answer": answer}
     )
 
-    data = r.json()
+    data = res.json()
 
-    if "evaluation" in data:
+    # -----------------------------
+    # NEXT QUESTION
+    # -----------------------------
+    if "next_question" in data:
+        st.session_state.question = data["next_question"]
+        st.session_state.q_count += 1
+        st.session_state.chat.append(("ai", st.session_state.question))
+        st.session_state.answer = ""
+        st.session_state.thinking_done = False
+        st.rerun()
+
+    # -----------------------------
+    # INTERVIEW COMPLETED
+    # -----------------------------
+    else:
+        st.session_state.final_score = data.get("score", 0)
+        st.session_state.feedback = data.get("feedback", "")
+
+        # 🔥 AUTO-SEND INTERVIEW SCORE TO BACKEND
+        requests.post(
+            f"{BACKEND_URL}/candidates/{candidate_id}/interview-result",
+            params={"interview_score": st.session_state.final_score}
+        )
+
         st.success("✅ Interview Completed")
-        st.markdown(f"""
-        <div class='ai-bubble'>
-        <b>Final Score:</b> {data['evaluation']['final_score']}<br><br>
-        <b>Recommendation:</b> {data['evaluation']['recommendation']}<br><br>
-        <b>Feedback:</b><br>{data['evaluation']['feedback']}
-        </div>
-        """, unsafe_allow_html=True)
-        st.stop()
 
-    # Next question
-    st.session_state.question = data["question"]
-    st.session_state.round += 1
-    st.session_state.chat.append(("ai", data["question"]))
-    st.session_state.answer = ""
-    st.session_state.spoken = False
-    st.session_state.thinking_done = False
-    st.rerun()
+        st.markdown(
+            f"""
+            <div class='ai-bubble'>
+            <b>Final Score:</b> {st.session_state.final_score}<br><br>
+            <b>Feedback:</b><br>{st.session_state.feedback}
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.stop()
