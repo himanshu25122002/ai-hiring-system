@@ -289,77 +289,91 @@ def start_interview(candidate_id: str):
 
 
 @app.post("/candidates/{candidate_id}/answer")
-def submit_interview_answer(
-    candidate_id: str,
-    answer: str = Form(...)
-):
+def submit_answer(candidate_id: str, answer: str):
+
     candidate = None
     job = None
 
-    for job_data in screening_db.values():
-        for c in job_data["candidates"]:
+    # 1️⃣ Locate candidate
+    for j in screening_db.values():
+        for c in j["candidates"]:
             if c["candidate_id"] == candidate_id:
                 candidate = c
-                job = job_data
+                job = j
                 break
 
-    if not candidate or not candidate.get("interview", {}).get("started"):
-        raise HTTPException(status_code=400, detail="Interview not started")
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
 
-    interview = candidate["interview"]
-    round_no = len(interview["qna"]) + 1
+    # 2️⃣ Initialize interview tracking
+    if "interview_qna" not in candidate:
+        candidate["interview_qna"] = []
 
-    # Save Q&A
-    interview["qna"].append({
-        "round": round_no,
-        "question": "Dynamic AI Question",
-        "answer": answer
-    })
+    candidate["interview_qna"].append(answer)
 
-    # Save EACH Q&A to Google Sheets
+    MAX_QUESTIONS = 5
+
+    # 3️⃣ If interview still going → ask next question
+    if len(candidate["interview_qna"]) < MAX_QUESTIONS:
+        from backend.interview_ai import generate_interview_question
+
+        next_question = generate_interview_question(
+            job["role"],
+            candidate.get("resume_text", ""),
+            candidate["interview_qna"]
+        )
+
+        return {"next_question": next_question}
+
+    # 4️⃣ Interview completed → evaluate
+    from backend.interview_ai import evaluate_interview
+    from backend.ranker import rank_candidates
+    from backend.google_sheets import append_candidate
+
+    evaluation = evaluate_interview(candidate["interview_qna"])
+    interview_score = evaluation.get("score", 0)
+
+    # 5️⃣ Recommendation logic
+    if interview_score >= 80:
+        recommendation = "STRONG_FIT"
+    elif interview_score >= 60:
+        recommendation = "MODERATE_FIT"
+    else:
+        recommendation = "NOT_RECOMMENDED"
+
+    candidate["interview_score"] = interview_score
+    candidate["recommendation"] = recommendation
+
+    # 6️⃣ Re-rank candidates after interview
+    job["candidates"] = rank_candidates(job["candidates"])
+
+    # 7️⃣ Save to Google Sheet
     append_candidate({
         "job_id": job["job_id"],
-        "candidate_id": candidate_id,
-        "interview_round": round_no,
-        "question": "Dynamic AI Question",
-        "answer": answer
+        "role": job["role"],
+        "candidate_id": candidate["candidate_id"],
+        "name": candidate["name"],
+        "email": candidate["email"],
+        "email_confidence": candidate.get("email_confidence"),
+        "skills": ", ".join(candidate.get("skills", [])),
+        "experience_years": candidate.get("experience_years"),
+        "score": candidate["score"],
+        "interview_score": interview_score,
+        "recommendation": recommendation,
+        "shortlisted": candidate["shortlisted"],
+        "resume_file": candidate.get("resume_file"),
+        "confidence": candidate.get("confidence"),
+        "rank": candidate["rank"],
+        "rank_score": round(candidate["rank_score"], 2)
     })
 
-    # Stop after 5 questions
-    if round_no >= 5:
-        evaluation = evaluate_interview(interview["qna"])
-
-        candidate["interview"]["completed"] = True
-        candidate["interview"]["evaluation"] = evaluation
-
-        # Save FINAL evaluation to Google Sheets
-        append_candidate({
-            "job_id": job["job_id"],
-            "candidate_id": candidate_id,
-            "skill_fit": evaluation.get("skill_fit"),
-            "communication": evaluation.get("communication"),
-            "problem_solving": evaluation.get("problem_solving"),
-            "culture_fit": evaluation.get("culture_fit"),
-            "final_score": evaluation.get("final_score"),
-            "recommendation": evaluation.get("recommendation"),
-            "feedback": evaluation.get("feedback")
-        })
-
-        return {
-            "evaluation": evaluation
-        }
-
-    # Generate NEXT question
-    next_question = generate_interview_question(
-        job_description=job["role"],
-        resume_text=candidate.get("resume_text", ""),
-        previous_qna=interview["qna"]
-    )
-
     return {
-        "question": next_question,
-        "round": round_no + 1
+        "message": "Interview completed",
+        "interview_score": interview_score,
+        "recommendation": recommendation,
+        "final_rank": candidate["rank"]
     }
+
 
 @app.post("/candidates/{candidate_id}/update-interview")
 def update_interview_result(
@@ -439,6 +453,7 @@ def get_screening_results(job_id: str):
 @app.get("/")
 def health():
     return {"status": "Backend running"}
+
 
 
 
