@@ -105,7 +105,7 @@ async def screen_resumes(
             "score": score_result["score"],
             "shortlisted": shortlisted,
             "resume_file": resume.filename,
-            "confidence": parsed_data.get("confidence", 0)
+            "confidence": parsed_data.get("confidence", 0),
             "interview_score": None,
             "recommendation": "PENDING"
 
@@ -440,6 +440,7 @@ def get_screening_results(job_id: str):
 @app.get("/")
 def health():
     return {"status": "Backend running"}
+
 
 
 
