@@ -106,6 +106,9 @@ async def screen_resumes(
             "shortlisted": shortlisted,
             "resume_file": resume.filename,
             "confidence": parsed_data.get("confidence", 0)
+            "interview_score": None,
+            "recommendation": "PENDING"
+
         })
 
     # ---- Ranking ----
@@ -127,7 +130,12 @@ async def screen_resumes(
             "resume_file": candidate["resume_file"],
             "confidence": candidate["confidence"],
             "rank": candidate["rank"],
-            "rank_score": round(candidate["rank_score"], 2)
+            "rank_score": round(candidate["rank_score"], 2),
+            "interview_score": candidate["interview_score"],
+            "recommendation": candidate["recommendation"]
+
+
+
         })
 
     screening_db[job_id] = job_data
@@ -370,6 +378,7 @@ def get_screening_results(job_id: str):
 @app.get("/")
 def health():
     return {"status": "Backend running"}
+
 
 
 
