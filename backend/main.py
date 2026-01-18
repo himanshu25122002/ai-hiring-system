@@ -361,6 +361,67 @@ def submit_interview_answer(
         "round": round_no + 1
     }
 
+@app.post("/candidates/{candidate_id}/update-interview")
+def update_interview_result(
+    candidate_id: str,
+    interview_score: int = Form(...),
+    interview_feedback: str = Form("")
+):
+    """
+    Save interview score, re-rank candidates, update Google Sheet
+    """
+
+    # 1️⃣ Find candidate + job
+    found_candidate = None
+    found_job = None
+
+    for job in screening_db.values():
+        for c in job["candidates"]:
+            if c["candidate_id"] == candidate_id:
+                found_candidate = c
+                found_job = job
+                break
+
+    if not found_candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    # 2️⃣ Save interview result
+    found_candidate["interview_score"] = interview_score
+    found_candidate["interview_feedback"] = interview_feedback
+
+    # 3️⃣ Re-rank candidates for this job
+    from backend.ranker import rank_candidates
+    found_job["candidates"] = rank_candidates(found_job["candidates"])
+
+    # 4️⃣ Update Google Sheet (append new interview result row)
+    from backend.google_sheets import append_candidate
+
+    append_candidate({
+        "job_id": found_job["job_id"],
+        "role": found_job["role"],
+        "candidate_id": found_candidate["candidate_id"],
+        "name": found_candidate["name"],
+        "email": found_candidate["email"],
+        "email_confidence": found_candidate.get("email_confidence"),
+        "skills": ", ".join(found_candidate.get("skills", [])),
+        "experience_years": found_candidate.get("experience_years"),
+        "score": found_candidate["score"],
+        "interview_score": interview_score,
+        "recommendation": found_candidate["recommendation"],
+        "shortlisted": found_candidate["shortlisted"],
+        "resume_file": found_candidate.get("resume_file"),
+        "confidence": found_candidate.get("confidence"),
+        "rank": found_candidate["rank"],
+        "rank_score": round(found_candidate["rank_score"], 2)
+    })
+
+    return {
+        "message": "Interview score saved and candidates re-ranked",
+        "candidate_id": candidate_id,
+        "interview_score": interview_score,
+        "final_rank": found_candidate["rank"],
+        "recommendation": found_candidate["recommendation"]
+    }
 
 # =================================================
 # HR: View Results
@@ -378,6 +439,7 @@ def get_screening_results(job_id: str):
 @app.get("/")
 def health():
     return {"status": "Backend running"}
+
 
 
 
