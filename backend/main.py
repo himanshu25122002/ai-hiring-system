@@ -504,6 +504,36 @@ def update_interview_result(candidate_id: str, interview_score: int):
         "rank": found_candidate["rank"],
         "recommendation": found_candidate["recommendation"]
     }
+    
+    # -----------------------------
+# FINAL INTERVIEW DECISION
+# -----------------------------
+    INTERVIEW_PASS_SCORE = 70
+
+    if interview_score >= INTERVIEW_PASS_SCORE:
+        found_candidate["email_stage"] = "INTERVIEW_PASSED"
+        found_candidate["final_selected"] = True
+
+    # Trigger FINAL interview email (Calendly)
+        from backend.make_service import trigger_make_webhook
+
+        trigger_make_webhook(
+            url=os.getenv("MAKE_FINAL_WEBHOOK"),
+            payload={
+                "candidate_id": found_candidate["candidate_id"],
+                "name": found_candidate["name"],
+                "email": found_candidate["email"],
+                "job_role": found_job["role"]
+            }
+        )
+
+    else:
+        found_candidate["email_stage"] = "INTERVIEW_FAILED"
+        found_candidate["final_selected"] = False
+
+
+
+
 
 
 # =================================================
@@ -522,6 +552,7 @@ def get_screening_results(job_id: str):
 @app.get("/")
 def health():
     return {"status": "Backend running"}
+
 
 
 
