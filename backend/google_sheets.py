@@ -48,6 +48,9 @@ def append_candidate(row: dict):
         row.get("shortlisted"),
         row.get("resume_file"),
         row.get("confidence")
+        row.get("email_stage", "RESUME_SHORTLISTED"),
+        row.get("personal_form_submitted", False)
+
     ])
 
 
