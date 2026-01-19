@@ -295,6 +295,46 @@ async def screen_resumes_from_drive(
     }
 
 
+@app.post("/candidates/form-submitted")
+def form_submitted(data: dict):
+    email = data.get("email")
+
+    if not email:
+        raise HTTPException(status_code=400, detail="Email required")
+
+    # Find candidate
+    found_candidate = None
+    for job in screening_db.values():
+        for c in job["candidates"]:
+            if c.get("email") == email:
+                found_candidate = c
+                found_job = job
+                break
+
+    if not found_candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+
+    # Update candidate state
+    found_candidate["personal_form_submitted"] = True
+    found_candidate["email_stage"] = "FORM_SUBMITTED"
+
+    # Trigger Email #2 (AI Interview)
+    from backend.make_service import trigger_make_webhook
+
+    trigger_make_webhook(
+        url=os.getenv("MAKE_INTERVIEW_WEBHOOK"),
+        payload={
+            "candidate_id": found_candidate["candidate_id"],
+            "name": found_candidate["name"],
+            "email": found_candidate["email"]
+        }
+    )
+
+    return {
+        "message": "Form submitted. AI interview email triggered.",
+        "candidate_id": found_candidate["candidate_id"]
+    }
+
 
 @app.post("/candidates/{candidate_id}/start-interview")
 def start_interview(candidate_id: str):
@@ -482,6 +522,7 @@ def get_screening_results(job_id: str):
 @app.get("/")
 def health():
     return {"status": "Backend running"}
+
 
 
 
