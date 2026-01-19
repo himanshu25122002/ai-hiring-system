@@ -126,19 +126,38 @@ async def screen_resumes(
             "skills": ", ".join(candidate["skills"]),
             "experience_years": candidate["experience_years"],
             "score": candidate["score"],
+            "interview_score": candidate["interview_score"],
+            "rank": candidate["rank"],
+            "rank_score": round(candidate["rank_score"], 2),
+            "recommendation": candidate["recommendation"],
             "shortlisted": candidate["shortlisted"],
             "resume_file": candidate["resume_file"],
             "confidence": candidate["confidence"],
-            "rank": candidate["rank"],
-            "rank_score": round(candidate["rank_score"], 2),
-            "interview_score": candidate["interview_score"],
-            "recommendation": candidate["recommendation"]
+            "email_stage": "RESUME_SHORTLISTED",
+            "personal_form_submitted": False
+
 
 
 
         })
 
+
+        if shortlisted:
+        trigger_make_webhook(
+            url=os.getenv("MAKE_SHORTLIST_WEBHOOK"),
+            payload={
+                "candidate_id": candidate_id,
+                "name": parsed_data.get("name"),
+                "email": parsed_data.get("email"),
+                "job_role": role
+            }
+        )
+
+
     screening_db[job_id] = job_data
+
+    
+
 
     return {
         "message": "Resumes processed & ranked successfully",
@@ -208,7 +227,7 @@ async def screen_resumes_from_drive(
         )
 
         candidate_id = str(uuid.uuid4())[:8]
-        shortlisted = score_result["score"] >= 70
+        shortlisted = score_result["score"] >= 90
 
         job_data["candidates"].append({
             "candidate_id": candidate_id,
@@ -236,14 +255,37 @@ async def screen_resumes_from_drive(
             "skills": ", ".join(candidate["skills"]),
             "experience_years": candidate["experience_years"],
             "score": candidate["score"],
+            "interview_score": candidate["interview_score"],
+            "rank": candidate["rank"],
+            "rank_score": round(candidate["rank_score"], 2),
+            "recommendation": candidate["recommendation"],
             "shortlisted": candidate["shortlisted"],
             "resume_file": candidate["resume_file"],
             "confidence": candidate["confidence"],
-            "rank": candidate["rank"],
-            "rank_score": round(candidate["rank_score"], 2)
+            "email_stage": "RESUME_SHORTLISTED",
+            "personal_form_submitted": False
+
+
         })
 
+
+        if shortlisted:
+        trigger_make_webhook(
+            url=os.getenv("MAKE_SHORTLIST_WEBHOOK"),
+            payload={
+                "candidate_id": candidate_id,
+                "name": parsed_data.get("name"),
+                "email": parsed_data.get("email"),
+                "job_role": role
+            }
+        )
+
+
     screening_db[job_id] = job_data
+    
+    
+
+
 
     return {
         "message": "Google Drive resumes processed & ranked successfully",
@@ -440,6 +482,7 @@ def get_screening_results(job_id: str):
 @app.get("/")
 def health():
     return {"status": "Backend running"}
+
 
 
 
