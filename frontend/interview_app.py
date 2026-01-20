@@ -236,3 +236,22 @@ if st.button("Submit Answer"):
         )
 
         st.stop()
+
+
+response = requests.post(
+    f"{BACKEND_URL}/interview/update",
+    json={
+        "job_id": st.session_state["job_id"],
+        "candidate_id": st.session_state["candidate_id"],
+        "interview_score": final_score,
+        "recommendation": recommendation
+    }
+)
+
+if response.status_code == 200:
+    st.success("Interview completed successfully!")
+else:
+    st.error("Failed to submit interview results")
+
+
+
