@@ -177,3 +177,18 @@ else:
     except Exception as e:
         st.warning("Google Sheet not accessible yet")
         st.exception(e)
+
+show_final_selected = st.checkbox("Show final interview candidates only")
+
+if show_final_selected and "final_selected" in df.columns:
+    df = df[df["final_selected"] == True]
+
+st.dataframe(
+    df.style.apply(
+        lambda row: ["background-color: #dcfce7" if row.get("final_selected") else "" for _ in row],
+        axis=1
+    )
+)
+
+
+
