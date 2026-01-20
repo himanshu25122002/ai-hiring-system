@@ -157,15 +157,24 @@ else:
 
             visible_columns = [
                 col for col in [
-                    "rank",
+                    "job_id",
+                    "role",
+                    "candidate_id",
                     "name",
                     "email",
+                    "email_confidence",
+                    "skills",
+                    "experience_years",
                     "score",
                     "interview_score",
-                    "Interview Status",
+                    "rank",
+                    "rank_score",
                     "recommendation",
                     "shortlisted",
-                    "confidence"
+                    "resume_file",
+                    "confidence",
+                    "email_stage",
+                    "personal_form_submitted"
                 ] if col in df.columns
             ]
 
@@ -177,6 +186,7 @@ else:
     except Exception as e:
         st.warning("Google Sheet not accessible yet")
         st.exception(e)
+
 
 
 
