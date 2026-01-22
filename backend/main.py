@@ -295,46 +295,64 @@ async def screen_resumes_from_drive(
     }
 
 
-@app.post("/candidates/form-submitted")
+app.post("/candidates/form-submitted")
 def form_submitted(data: dict):
-    email = data.get("email")
+    # 1️⃣ Read candidate_id (NOT email)
+    candidate_id = data.get("candidate_id")
 
-    if not email:
-        raise HTTPException(status_code=400, detail="Email required")
+    if not candidate_id:
+        raise HTTPException(status_code=400, detail="candidate_id required")
 
-    # Find candidate
+    # 2️⃣ Find candidate using candidate_id
     found_candidate = None
+    found_job = None
+
     for job in screening_db.values():
         for c in job["candidates"]:
-            if c.get("email") == email:
+            if c.get("candidate_id") == candidate_id:
                 found_candidate = c
                 found_job = job
                 break
+        if found_candidate:
+            break
 
     if not found_candidate:
         raise HTTPException(status_code=404, detail="Candidate not found")
 
-    # Update candidate state
+    # 3️⃣ Update candidate state (IN MEMORY)
     found_candidate["personal_form_submitted"] = True
     found_candidate["email_stage"] = "FORM_SUBMITTED"
+    
 
-    # Trigger Email #2 (AI Interview)
+    from backend.google_sheets import update_candidate_by_id
+
+    update_candidate_by_id(
+        candidate_id=found_candidate["candidate_id"],
+        updates={
+            "personal_form_submitted": True,
+            "email_stage": "FORM_SUBMITTED"
+        }
+    )
+
+
+
+    # 4️⃣ Trigger Email #2 (AI Interview)
     from backend.make_service import trigger_make_webhook
 
     trigger_make_webhook(
         url=os.getenv("MAKE_INTERVIEW_WEBHOOK"),
         payload={
             "candidate_id": found_candidate["candidate_id"],
-            "name": found_candidate["name"],
-            "email": found_candidate["email"]
+            "name": found_candidate.get("name"),
+            "email": found_candidate.get("email"),
         }
     )
 
+    # 5️⃣ Response
     return {
         "message": "Form submitted. AI interview email triggered.",
         "candidate_id": found_candidate["candidate_id"]
     }
-
 
 @app.post("/candidates/{candidate_id}/start-interview")
 def start_interview(candidate_id: str):
@@ -552,6 +570,7 @@ def get_screening_results(job_id: str):
 @app.get("/")
 def health():
     return {"status": "Backend running"}
+
 
 
 
