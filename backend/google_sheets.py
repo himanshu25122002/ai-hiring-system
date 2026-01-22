@@ -57,17 +57,14 @@ def update_candidate_by_id(candidate_id: str, updates: dict):
     sheet = get_sheet()
     records = sheet.get_all_records()
 
-    for idx, row in enumerate(records, start=2):
-        if row.get("candidate_id") == candidate_id:
-            headers = sheet.row_values(1)
-
-            for key, value in updates.items():
-                if key in headers:
-                    col_index = headers.index(key) + 1
-                    sheet.update_cell(idx, col_index, value)
-
+    for idx, row in enumerate(records, start=2):  # row 1 = header
+        if str(row.get("candidate_id")) == str(candidate_id):
+            for col_name, value in updates.items():
+                col_index = list(row.keys()).index(col_name) + 1
+                sheet.update_cell(idx, col_index, value)
             return True
 
-    return False
+    raise ValueError("Candidate not found in Google Sheet")
+
 
 
