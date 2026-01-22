@@ -53,4 +53,21 @@ def append_candidate(row: dict):
 
     ])
 
+def update_candidate_by_id(candidate_id: str, updates: dict):
+    sheet = get_sheet()
+    records = sheet.get_all_records()
+
+    for idx, row in enumerate(records, start=2):
+        if row.get("candidate_id") == candidate_id:
+            headers = sheet.row_values(1)
+
+            for key, value in updates.items():
+                if key in headers:
+                    col_index = headers.index(key) + 1
+                    sheet.update_cell(idx, col_index, value)
+
+            return True
+
+    return False
+
 
