@@ -241,7 +241,7 @@ async def screen_resumes_from_drive(
             "score": score_result["score"],
             "shortlisted": shortlisted,
             "resume_file": file["name"],
-            "confidence": parsed_data.get("confidence", 0)
+            "confidence": parsed_data.get("confidence", 0),
             "interview_score": "",
             "recommendation": "",
             "email_stage": "RESUME_SHORTLISTED",
@@ -577,6 +577,7 @@ def get_screening_results(job_id: str):
 @app.get("/")
 def health():
     return {"status": "Backend running"}
+
 
 
 
