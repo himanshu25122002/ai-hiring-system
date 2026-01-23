@@ -33,25 +33,26 @@ def append_candidate(row: dict):
     sheet = get_sheet()
 
     sheet.append_row([
-        row.get("job_id"),
-        row.get("role"),
-        row.get("candidate_id"),
-        row.get("name"),
-        row.get("email"),
-        row.get("skills"),
-        row.get("experience_years"),
-        row.get("score"),
-        row.get("interview_score"),
-        row.get("rank"),
-        row.get("rank_score"),
-        row.get("recommendation"),
-        row.get("shortlisted"),
-        row.get("resume_file"),
-        row.get("confidence"),
+        row.get("job_id", ""),
+        row.get("role", ""),
+        row.get("candidate_id", ""),
+        row.get("name", ""),
+        row.get("email", ""),
+        row.get("skills", ""),
+        row.get("experience_years", 0),
+        row.get("score", 0),
+        row.get("interview_score", ""),
+        row.get("rank", ""),
+        row.get("rank_score", ""),
+        row.get("recommendation", ""),
+        row.get("shortlisted", False),
+        row.get("resume_file", ""),
+        row.get("confidence", ""),
         row.get("email_stage", "RESUME_SHORTLISTED"),
-        row.get("personal_form_submitted", False)
+        row.get("personal_form_submitted", False),
+        row.get("final_selected", False)  # ✅ NEW COLUMN
+    ], value_input_option="USER_ENTERED")
 
-    ])
 
 def update_candidate_by_id(candidate_id: str, updates: dict):
     sheet = get_sheet()
