@@ -106,8 +106,10 @@ async def screen_resumes(
             "shortlisted": shortlisted,
             "resume_file": resume.filename,
             "confidence": parsed_data.get("confidence", 0),
-            "interview_score": None,
-            "recommendation": "PENDING"
+            "interview_score": "",
+            "recommendation": "",
+            "email_stage": "RESUME_SHORTLISTED",
+            "personal_form_submitted": False
 
         })
 
@@ -126,10 +128,10 @@ async def screen_resumes(
             "skills": ", ".join(candidate["skills"]),
             "experience_years": candidate["experience_years"],
             "score": candidate["score"],
-            "interview_score": candidate["interview_score"],
+            "interview_score": candidate.get("interview_score", ""),
             "rank": candidate["rank"],
             "rank_score": round(candidate["rank_score"], 2),
-            "recommendation": candidate["recommendation"],
+            "recommendation": candidate.get("recommendation", ""),
             "shortlisted": candidate["shortlisted"],
             "resume_file": candidate["resume_file"],
             "confidence": candidate["confidence"],
@@ -240,6 +242,11 @@ async def screen_resumes_from_drive(
             "shortlisted": shortlisted,
             "resume_file": file["name"],
             "confidence": parsed_data.get("confidence", 0)
+            "interview_score": "",
+            "recommendation": "",
+            "email_stage": "RESUME_SHORTLISTED",
+            "personal_form_submitted": False
+
         })
 
     job_data["candidates"] = rank_candidates(job_data["candidates"])
@@ -255,10 +262,10 @@ async def screen_resumes_from_drive(
             "skills": ", ".join(candidate["skills"]),
             "experience_years": candidate["experience_years"],
             "score": candidate["score"],
-            "interview_score": candidate["interview_score"],
+            "interview_score": candidate.get("interview_score", ""),
             "rank": candidate["rank"],
             "rank_score": round(candidate["rank_score"], 2),
-            "recommendation": candidate["recommendation"],
+            "recommendation": candidate.get("recommendation", ""),
             "shortlisted": candidate["shortlisted"],
             "resume_file": candidate["resume_file"],
             "confidence": candidate["confidence"],
@@ -570,6 +577,7 @@ def get_screening_results(job_id: str):
 @app.get("/")
 def health():
     return {"status": "Backend running"}
+
 
 
 
