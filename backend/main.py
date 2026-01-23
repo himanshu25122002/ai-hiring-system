@@ -108,7 +108,9 @@ async def screen_resumes(
             "confidence": parsed_data.get("confidence", 0),
             "interview_score": "",
             "recommendation": "",
-            "email_stage": "RESUME_SHORTLISTED",
+            "email_stage": "RESUME_SHORTLISTED" if shortlisted else "REJECTED",
+
+
             "personal_form_submitted": False
 
         })
@@ -135,23 +137,27 @@ async def screen_resumes(
             "shortlisted": candidate["shortlisted"],
             "resume_file": candidate["resume_file"],
             "confidence": candidate["confidence"],
-            "email_stage": "RESUME_SHORTLISTED",
+            "email_stage": "RESUME_SHORTLISTED" if shortlisted else "REJECTED",
+
+
             "personal_form_submitted": False,
             "final_selected": False
 
         })
 
 
-        if shortlisted:
+        if candidate["shortlisted"]:
             trigger_make_webhook(
                 url=os.getenv("MAKE_SHORTLIST_WEBHOOK"),
                 payload={
-                    "candidate_id": candidate_id,
-                    "name": parsed_data.get("name"),
-                    "email": parsed_data.get("email"),
+                    "candidate_id": candidate["candidate_id"],
+                    "name": candidate["name"],
+                    "email": candidate["email"],
                     "job_role": role
                 }
             )
+
+
 
 
     screening_db[job_id] = job_data
@@ -242,7 +248,9 @@ async def screen_resumes_from_drive(
             "confidence": parsed_data.get("confidence", 0),
             "interview_score": "",
             "recommendation": "",
-            "email_stage": "RESUME_SHORTLISTED",
+            "email_stage": "RESUME_SHORTLISTED" if shortlisted else "REJECTED",
+
+
             "personal_form_submitted": False
 
         })
@@ -267,7 +275,9 @@ async def screen_resumes_from_drive(
             "shortlisted": candidate["shortlisted"],
             "resume_file": candidate["resume_file"],
             "confidence": candidate["confidence"],
-            "email_stage": "RESUME_SHORTLISTED",
+            "email_stage": "RESUME_SHORTLISTED" if shortlisted else "REJECTED",
+
+
             "personal_form_submitted": False,
             "final_selected": False
 
@@ -276,13 +286,13 @@ async def screen_resumes_from_drive(
         })
 
 
-        if shortlisted:
+        if candidate["shortlisted"]:
             trigger_make_webhook(
                 url=os.getenv("MAKE_SHORTLIST_WEBHOOK"),
                 payload={
-                    "candidate_id": candidate_id,
-                    "name": parsed_data.get("name"),
-                    "email": parsed_data.get("email"),
+                    "candidate_id": candidate["candidate_id"],
+                    "name": candidate["name"],
+                    "email": candidate["email"],
                     "job_role": role
                 }
             )
@@ -577,6 +587,7 @@ def get_screening_results(job_id: str):
 @app.get("/")
 def health():
     return {"status": "Backend running"}
+
 
 
 
