@@ -136,10 +136,8 @@ async def screen_resumes(
             "resume_file": candidate["resume_file"],
             "confidence": candidate["confidence"],
             "email_stage": "RESUME_SHORTLISTED",
-            "personal_form_submitted": False
-
-
-
+            "personal_form_submitted": False,
+            "final_selected": False
 
         })
 
@@ -270,7 +268,9 @@ async def screen_resumes_from_drive(
             "resume_file": candidate["resume_file"],
             "confidence": candidate["confidence"],
             "email_stage": "RESUME_SHORTLISTED",
-            "personal_form_submitted": False
+            "personal_form_submitted": False,
+            "final_selected": False
+
 
 
         })
@@ -577,6 +577,7 @@ def get_screening_results(job_id: str):
 @app.get("/")
 def health():
     return {"status": "Backend running"}
+
 
 
 
